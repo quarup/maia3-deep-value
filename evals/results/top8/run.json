@@ -1,0 +1,1 @@
+{"eps": 0.01, "model": "maia3-79m", "games": 2000, "positions_per_game": 5, "moves": "top8", "note": "The earlier way of choosing moves (likeliest 8 up to 97% of the policy, renormalised), run with evals/variants.py. Stopped at 962 of 2000 games; kept for the comparison in docs/design-notes.md."}

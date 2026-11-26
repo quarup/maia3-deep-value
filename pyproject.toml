@@ -1,0 +1,33 @@
+[project]
+name = "maia3-deep-value"
+version = "0.1.0"
+description = "Win/draw/loss chances for a chess position at the players' ratings: Maia-3's policy followed deep, pruned by path probability"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "chess>=1.10",
+    "numpy",
+]
+
+[project.optional-dependencies]
+# Maia-3 itself (AGPL-3, not on PyPI) and what it needs to load its weights.
+maia = [
+    "maia3 @ https://github.com/CSSLab/maia3/archive/1e13597c42d4858b7cfd7cfdae01e297263364b2.zip",
+    "torch>=2.4",
+    "huggingface-hub",
+]
+evals = ["matplotlib", "zstandard"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+deep-value = "deep_value.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["deep_value"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
