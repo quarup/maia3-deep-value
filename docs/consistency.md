@@ -24,11 +24,11 @@ the first tree never saw.
 
 ## The value head averaged k moves ahead: 300 board states
 
-`evals/lookahead.py`. V_k is the value head k moves later, weighted by the policy along every line; k = 0 is the value head alone and k = 1 is one move ahead. k = 0, 1, 2 are exact. k = 3 and up are sampled: 500 lines per board state, each move drawn from the policy, which is unbiased; the noise on one step averages 0.8 points, and the same draws give k = 2 within 0.02 points of the exact value on average. Points, for the player to move at the sampled board state; ± is a 95% interval.
+`evals/lookahead.py`. V_k is the value head k moves later, weighted by the policy along every line; k = 0 is the value head and k = 1 is one move ahead. k = 0, 1, 2 are exact. k = 3 and up are sampled: 500 lines per board state, each move drawn from the policy, which is unbiased; the noise on one step averages 0.8 points, and the same draws give k = 2 within 0.02 points of the exact value on average. Points, for the player to move at the sampled board state; ± is a 95% interval.
 
-![The value head averaged k moves ahead, minus the value head alone](img/zigzag_by_k.png)
+![The value head averaged k moves ahead, minus the value head](img/zigzag_by_k.png)
 
-| k moves ahead | Minus the value head alone (k = 0): 10th percentile | Median | 90th | Average | Step from k − 1: 10th percentile | Median | 90th | Average | Average minus the deep value (eps 0.002) |
+| k moves ahead | Minus the value head (k = 0): 10th percentile | Median | 90th | Average | Step from k − 1: 10th percentile | Median | 90th | Average | Average minus the deep value (eps 0.002) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0 |  |  |  |  |  |  |  |  | +1.26 ± 0.66 |
 | 1 | -12.1 | -1.2 | +4.0 | -2.44 ± 0.73 | -12.1 | -1.2 | +4.0 | -2.44 ± 0.73 | -1.17 ± 0.57 |
@@ -93,7 +93,7 @@ Absolute values, points.
 | 6 moves ahead | 1.1 | 3.0 | 4.8 | 6.3 | 2.0 |
 | 7 moves ahead | 1.3 | 3.3 | 5.3 | 7.6 | 2.1 |
 | 8 moves ahead | 1.2 | 3.1 | 4.6 | 6.4 | 2.0 |
-| Midpoint of k = 0 and k = 1 | 1.8 | 4.7 | 7.3 | 8.8 | 2.9 |
+| Midpoint | 1.8 | 4.7 | 7.3 | 8.8 | 2.9 |
 | Deep value, eps 0.2 | 1.8 | 4.1 | 5.7 | 7.6 | 2.6 |
 | Deep value, eps 0.05 | 1.0 | 2.2 | 3.5 | 4.4 | 1.5 |
 | Deep value, eps 0.01 | 0.4 | 1.1 | 1.6 | 2.0 | 0.7 |
@@ -101,13 +101,14 @@ Absolute values, points.
 
 ## One move: 299 board states, every legal move valued afresh
 
-Each legal move gets its own tree (`evals/tail_deep.py`), so the deep value of a board state is compared with deep values it was not built from. If every legal move lowers the value, the value before the move was one the player could not keep. Points, for the player to move; ± is a 95% interval.
+Each legal move gets its own tree (`evals/tail_deep.py`), so the deep value of a board state is compared with deep values it was not built from. If every legal move lowers the value, the value before the move was one the player could not keep. Points, for the player to move; ± is a 95% interval. The midpoint is the average of the value head and one move ahead; its step is exact, from the values two moves ahead (`evals/lookahead.py`).
 
 ![The step from a value to the average of the values after each move](img/one_move_step.png)
 
 | Estimate | Value after the move, averaged over the moves, minus the value before: 10th percentile | Median | 90th | Average (should be 0) | Mean absolute | 5 points or more either way | 10 points or more | Every move lowers the value | Every move lowers it by over 2 points |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Value head alone | -12.1 | -1.2 | +4.0 | -2.45 ± 0.73 | 4.77 | 31.8% | 14.0% | 35.1% | 22.7% |
+| Value head | -12.1 | -1.2 | +4.0 | -2.45 ± 0.73 | 4.77 | 31.8% | 14.0% | 35.1% | 22.7% |
+| Midpoint | -2.0 | +0.1 | +2.1 | +0.04 ± 0.24 | 1.44 | 3.3% | 0.3% |  |  |
 | Deep value (eps 0.01) | -0.9 | -0.1 | +0.8 | -0.04 ± 0.09 | 0.58 | 0.0% | 0.0% | 3.0% | 0.0% |
 
 
@@ -117,7 +118,7 @@ Every board state of each game, valued at the players' ratings (`evals/run_games
 
 | Estimate | A move changes the mover's value by (should be 0) | Mean absolute change per move | Correlation of one change with the next (should be 0) | Squared changes over the game / squared distance start to result (should be 1) |
 | --- | --- | --- | --- | --- |
-| Value head alone | -2.38 (-3.09 to -1.61) | 5.49 (4.93 to 6.16) | -0.61 (-0.70 to -0.50) | 2.16 (1.62 to 2.89) |
+| Value head | -2.38 (-3.09 to -1.61) | 5.49 (4.93 to 6.16) | -0.61 (-0.70 to -0.50) | 2.16 (1.62 to 2.89) |
 | One move ahead | +3.07 (+2.35 to +3.86) | 5.48 (4.93 to 6.10) | -0.62 (-0.70 to -0.52) | 2.17 (1.62 to 2.83) |
 | Deep value, eps 0.05 | +0.21 (+0.04 to +0.39) | 2.63 (2.48 to 2.81) | -0.04 (-0.09 to +0.02) | 0.89 (0.73 to 1.07) |
 | Deep value, eps 0.01 | +0.50 (+0.35 to +0.66) | 2.63 (2.48 to 2.81) | -0.05 (-0.11 to +0.01) | 0.89 (0.73 to 1.07) |
@@ -130,7 +131,7 @@ Absolute change in the value over one played move, points, all moves of all game
 
 | Estimate | Median | 80th percentile | 90th | 95th | 5 points or more | 10 points or more |
 | --- | --- | --- | --- | --- | --- | --- |
-| Value head alone | 3.7 | 8.7 | 12.6 | 17.0 | 38.8% | 16.0% |
+| Value head | 3.7 | 8.7 | 12.6 | 17.0 | 38.8% | 16.0% |
 | One move ahead | 3.7 | 9.0 | 12.8 | 16.9 | 39.8% | 16.6% |
 | Deep value, eps 0.002 | 1.2 | 3.8 | 6.3 | 9.5 | 14.5% | 4.4% |
 | Value head's change minus the deep value's, same move | 3.5 | 8.4 | 12.0 | 16.0 | 37.5% | 14.7% |
@@ -142,9 +143,9 @@ MSE of value on the 10000 board states of the main run; an improvement is the ot
 
 | Estimate | Model evaluations | MSE of value | Improvement over the value head | Improvement over the midpoint | Spread of values over a game | Change per move | Gap to the average of the two neighbouring board states | Correlation of successive changes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Value head alone | 1 | 0.1949 |  | -1.7 (-2.3 to -1.2) | 15.3 | 7.5 | 6.5 | -0.61 |
+| Value head | 1 | 0.1949 |  | -1.7 (-2.3 to -1.2) | 15.3 | 7.5 | 6.5 | -0.61 |
 | One move ahead | about 32 | 0.1937 | 1.3 (0.2 to 2.3) | -0.4 (-1.0 to 0.1) | 15.2 | 7.3 | 6.4 | -0.62 |
-| Midpoint of the two | about 32 | 0.1932 | 1.7 (1.2 to 2.3) |  | 15.0 | 4.7 | 3.4 | +0.00 |
+| Midpoint | about 32 | 0.1932 | 1.7 (1.2 to 2.3) |  | 15.0 | 4.7 | 3.4 | +0.00 |
 | Deep value, eps 0.5 | 2 | 0.1934 | 1.6 (0.9 to 2.3) | -0.1 (-0.7 to 0.4) | 15.2 | 5.9 | 4.6 | -0.21 |
 | Deep value, eps 0.2 | 4 | 0.1922 | 2.7 (1.8 to 3.7) | 1.0 (0.4 to 1.7) | 15.3 | 5.2 | 3.8 | -0.06 |
 | Deep value, eps 0.1 | 8 | 0.1920 | 3.0 (2.0 to 4.0) | 1.3 (0.6 to 2.0) | 15.2 | 5.0 | 3.6 | -0.03 |
@@ -159,7 +160,7 @@ A stretch chosen to show the pattern clearly: a level middlegame (Stockfish 18 a
 
 ![One stretch of a game, move by move](img/zigzag_example.png)
 
-| To move | Value head alone | Deep value | Move then played |
+| To move | Value head | Deep value | Move then played |
 | --- | --- | --- | --- |
 | Black | 49 | 51 | 32...hxg3 |
 | White | 59 | 50 | 33.hxg3 |
@@ -176,4 +177,4 @@ A stretch chosen to show the pattern clearly: a level middlegame (Stockfish 18 a
 
 And a whole game chosen by rule, not by eye: of the games of 50 to 90 moves, the one whose value-head movement per move is the median.
 
-![White's value along one game: value head alone and deep value](img/game_trace.png)
+![White's value along one game: value head and deep value](img/game_trace.png)

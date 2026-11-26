@@ -88,7 +88,7 @@ def main():
             cells.append(f"{st.mean(d):+.2f} ± {ci(d):.2f}")
         print(f"| {eps:g} | " + " | ".join(cells) + " |")
     z = [abs(r["zero_hop"] - r["ref"]) * 100 for r in out]
-    print(f"\nValue head alone: {st.mean(z):.2f}")
+    print(f"\nValue head: {st.mean(z):.2f}")
 
 
 main()

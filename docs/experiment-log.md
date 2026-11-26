@@ -10,7 +10,7 @@ the player to move at the board state in question. All runs use `maia3-79m` at t
 
 | Estimate | What it is | Model evaluations |
 | --- | --- | --- |
-| Value head alone (zero-hop) | The value head on the board state | 1 |
+| Value head (zero-hop) | The value head on the board state | 1 |
 | One move ahead (one-hop) | The value head after each legal move, weighted by the policy | about 32 |
 | Midpoint | The plain average of the two rows above | about 32 |
 | k moves ahead | The value head k moves later, weighted by the policy along every line | about 30^k |
@@ -33,7 +33,7 @@ Scripts: `evals/run_games.py` (every board state of 60 games, 4,425 board states
 Idea: a sound forecast, before a move, equals the average of what it will say after the move. So a move should
 not change the mover's value on average, and one change should not predict the next.
 
-| Check | Value head alone | One move ahead | Deep value, eps 0.002 |
+| Check | Value head | One move ahead | Deep value, eps 0.002 |
 | --- | --- | --- | --- |
 | A move changes the mover's value by, on average (should be 0) | −2.38 | +3.07 | +0.53 |
 | Correlation of one change with the next (should be 0) | −0.61 | −0.62 | −0.05 |
@@ -59,7 +59,7 @@ moves left out.
 
 | Estimate | Spread of values over the game | Change from one move to the next | Gap to the average of the two neighbouring board states |
 | --- | --- | --- | --- |
-| Value head alone | 15.3 | 7.5 | 6.5 |
+| Value head | 15.3 | 7.5 | 6.5 |
 | One move ahead | 15.3 | 7.3 | 6.4 |
 | Midpoint | 15.0 | 4.7 | 3.4 |
 | Deep value, eps 0.05 | 15.2 | 4.9 | 3.5 |
@@ -102,7 +102,7 @@ The run took 91 minutes on the laptop GPU (1.32 million evaluations). Full table
 
 | k moves ahead | Average minus the deep value (eps 0.002) | Average step from k − 1 |
 | --- | --- | --- |
-| 0 (value head alone) | +1.26 ± 0.66 | |
+| 0 (value head) | +1.26 ± 0.66 | |
 | 1 | −1.17 ± 0.57 | −2.44 ± 0.73 |
 | 2 | +1.37 ± 0.45 | +2.54 ± 0.64 |
 | 3 | −1.44 ± 0.44 | −2.81 ± 0.62 |
@@ -145,13 +145,13 @@ Absolute gap to the deep value at eps 0.002, points:
 
 | Estimate | Median | 80th percentile | 90th | 95th | Mean |
 | --- | --- | --- | --- | --- | --- |
-| Value head alone (k = 0) | 2.7 | 6.7 | 9.5 | 11.7 | 4.1 |
+| Value head (k = 0) | 2.7 | 6.7 | 9.5 | 11.7 | 4.1 |
 | One move ahead (k = 1) | 2.1 | 4.9 | 7.9 | 11.5 | 3.3 |
 | k = 2 | 1.8 | 4.1 | 5.9 | 8.5 | 2.8 |
 | k = 4 | 1.4 | 3.2 | 5.1 | 6.6 | 2.2 |
 | k = 6 | 1.1 | 3.0 | 4.8 | 6.3 | 2.0 |
 | k = 8 | 1.2 | 3.1 | 4.6 | 6.4 | 2.0 |
-| Midpoint of k = 0 and k = 1 | 1.8 | 4.7 | 7.3 | 8.8 | 2.9 |
+| Midpoint | 1.8 | 4.7 | 7.3 | 8.8 | 2.9 |
 | Deep value, eps 0.2 | 1.8 | 4.1 | 5.7 | 7.6 | 2.6 |
 | Deep value, eps 0.05 | 1.0 | 2.2 | 3.5 | 4.4 | 1.5 |
 | Deep value, eps 0.01 | 0.4 | 1.1 | 1.6 | 2.0 | 0.7 |
@@ -168,7 +168,7 @@ is the value head's MSE minus the estimate's, times 1,000; intervals are each ag
 
 | Estimate | Evaluations | MSE of value | Improvement over value head, x1000 (95%) | Change per move (points) | Correlation of one change with the next |
 | --- | --- | --- | --- | --- | --- |
-| Value head alone | 1 | 0.1949 | 0 | 7.5 | −0.61 |
+| Value head | 1 | 0.1949 | 0 | 7.5 | −0.61 |
 | One move ahead | about 32 | 0.1937 | 1.3 (0.2 to 2.3) | 7.3 | −0.62 |
 | Midpoint | about 32 | 0.1932 | 1.7 (1.2 to 2.3) | 4.7 | 0.00 |
 | Deep value, eps 0.5 | 2 | 0.1934 | 1.6 (0.8 to 2.3) | 5.9 | −0.21 |
@@ -205,7 +205,7 @@ is the value head's MSE minus the estimate's, times 1,000; intervals are each ag
   its 5M model at 62.8% value accuracy and 0.736 value loss on 2022 blitz positions after move 10 with time
   pressure removed; ours are `maia3-79m` on October 2026 games balanced by rating, after the first 8 moves, time pressure
   included (63.2% and 0.7360). With the paper's two position filters applied to our board states (6,331 of the
-  10,000), the value head scores 65.7% and 0.7029 and the deep value 66.9% and 0.6884. The README has the table.
+  10,000), the value head scores 65.7% and 0.7029 and the deep value 66.9% and 0.6884. [evals.md](evals.md) has the table.
 
 - **Swing sizes along a game** (for the README's opening statement): over all moves of the 60 games, the value
   head changes by 10 points or more on 16.0% of moves and by 5 or more on 38.8%; the deep value on 4.4% and
@@ -225,6 +225,22 @@ is the value head's MSE minus the estimate's, times 1,000; intervals are each ag
   follow how close the game is to ending: board states before move 40 within 10 moves of the end average −0.2.
   The mover's clock goes with it (−0.8 with 2 minutes or more, −10.6 under 30 seconds), though the model has no
   clock input. Not explained. Table "Where the lean is" in [consistency.md](consistency.md).
+
+## 7. The midpoint in the headline results; one set of names (2026-11-26)
+
+- **The midpoint was added to both headline comparisons** (Quarup). On the one-move check its step is exact from
+  data already stored: the midpoint is (V0 + V1) / 2, its average after the move is (V1 + V2) / 2, so the step
+  is (V2 − V0) / 2. On the 299 board states: 10th percentile −2.0, median +0.1, 90th +2.1; 3.3% of board states
+  at 5 points or more and 0.3% at 10 or more. The deep value: −0.9, −0.1, +0.8, and none.
+- **Along a game the midpoint moves as little per move as the deep value** (section 5), but on this check its
+  step is more than twice as wide. The two measures differ because the along-game one includes the real effect
+  of the move played, which is the same for both and hides the difference.
+- **Accuracy on the 10,000 board states:** midpoint 63.6%, value loss 0.7276, MSE of value 0.1932 (1.7 better
+  than the value head, 1.2 to 2.3); deep value 64.0%, 0.7243, 0.1911 (3.9 better).
+- **Names.** Every document and chart now says "value head", "one move ahead", "midpoint" and "deep value".
+  "Zero-hop" and "one-hop" remain only as field names in the code and data (`zero_hop`, `one_hop`).
+- **The README's results** are now two parts, stability (the one-move check) and accuracy, each comparing the
+  value head, the midpoint and the deep value. The along-game table moved to "Variations explored".
 
 ## Open items
 

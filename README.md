@@ -32,27 +32,50 @@ This stretch was chosen because it shows the pattern clearly; [Results](#results
 
 ## Results
 
-The two factors that change the win probability throughout a game are different board positions and ML model inconsistency
+### Value prediction stability
+
+The two factors that change the value (i.e. win probability) prediction throughout a game are different board positions and ML model inconsistency
 
 Here we measure ML model inconsistency in isolation by fixing the board position and estimating the board value twice:
 
 1. the value head prediction at the position, and
 2. the weighted average of all possible value predictions one move later
 
-A perfect ML model would output the same number in both cases. However, at least for recent Lichess blitz games, Maia-3 seems to be optimistic towards the mover, which often leads it too output lower estimates with #2 than #1.
+A perfect ML model would output the same number in both cases. However, at least for recent Lichess blitz games, Maia-3 seems to be optimistic towards the mover, which often leads it to output lower estimates with #2 than #1.
 
-In contrast, our **deep value** takes a weigthed avreage across multiple layers of possible moves, significantly reducing inconsistency between adjacent board states.
+In the following analysis, we compare:
+
+* $\color{#2a78d6}{\textsf{\textbf{blue: value head}}}$ is #1 above, Maia-3's own prediction (the baseline)
+* $\color{#8a63d2}{\textsf{\textbf{purple: midpoint}}}$ is the average of #1 and #2, a simple fix for the zig-zag that already improves stability a lot
+* $\color{#1baf7a}{\textsf{\textbf{green: deep value}}}$ is a weighted average across multiple layers of possible moves, which improves it the most
 
 On 299 board states from as many games, in percentage points for the player to move:
 
-![The step from a value to the average of the values after each move: value head alone and deep value](docs/img/one_move_step.png)
+![The step from a value to the average of the values after each move: value head, midpoint and deep value](docs/img/one_move_step.png)
 
 | Average after the move, minus the value before it | 10th percentile | Median | 90th percentile | 5 points or more either way | 10 points or more |
 | --- | --- | --- | --- | --- | --- |
-| Value head alone | −12.1 | −1.2 | +4.0 | 32% of board states | 14% |
+| Value head | −12.1 | −1.2 | +4.0 | 32% of board states | 14% |
+| Midpoint | −2.0 | +0.1 | +2.1 | 3% | 0.3% |
 | **Deep value** | **−0.9** | **−0.1** | **+0.8** | **0%** | **0%** |
 
-We also tried a few other less successful variations, such as simply taking the average of #1 and #2 above. [Details below](#variations-explored).
+The midpoint removes most of the inconsistency, but its step is still more than twice as wide as the deep value's. It and the other variations we tried are [detailed below](#variations-explored).
+
+### Value prediction accuracy
+
+The deep value is also slightly closer to how the games really ended. On 10,000 board states from 2,000 games, each estimate is scored against the game's result:
+
+| Estimate | Value accuracy | Value loss (cross-entropy) | MSE of value | Change in MSE from the value head, ×1000 (95% interval) |
+| --- | --- | --- | --- | --- |
+| Value head | 63.2% | 0.7360 | 0.1949 | |
+| Midpoint | 63.6% | 0.7276 | 0.1932 | −1.7 (−2.3 to −1.2) |
+| **Deep value** | **64.0%** | **0.7243** | **0.1911** | **−3.9 (−5.0 to −2.7)** |
+
+Value accuracy and value loss are the Maia-3 paper's metrics; the MSE of value is the squared gap between win + draw / 2 and the result.
+
+![Change in MSE of value from the value head, by slice: midpoint and deep value](docs/img/mse_by_slice.png)
+
+The gain is small but holds on every metric, and the midpoint gets less than half of it. It shows in every slice except games lost on time, which the model cannot see coming because it has no clock input. Calibration and the full tables are in [docs/evals.md](docs/evals.md).
 
 ## Dataset: evaluation games
 
@@ -82,7 +105,7 @@ Every box in the picture shows what the value head says about that board state o
 
 All three estimates are built from the same two model outputs. For a board state $s$, write $v(s)$ for the value head's output and $\pi(a \mid s)$ for the policy head's probability of move $a$. Values below are for White, as one number (win + draw / 2).
 
-**Value head alone (zero-hop).** One model evaluation, the "value head" number in the root box:
+**Value head (zero-hop).** One model evaluation, the "value head" number in the root box:
 
 ```math
 V_0(s) = v(s) = 0.65
@@ -156,8 +179,9 @@ The names follow the Maia-3 paper where it has them.
 | Board state | A position together with the moves that led to it. Maia-3 reads the last 8 board states, so history is part of the input. |
 | Policy | The policy head's probability for each legal move, at the mover's rating. |
 | Value | The game outcome prediction: probabilities of win, draw and loss. As one number: win + draw / 2, usually written as a percentage. A point is one percentage point of that. |
-| Zero-hop | The value head applied to the board state itself. One model evaluation. |
-| One-hop | The value head applied to each board state one move later, averaged with the policy as weights. |
+| Value head (zero-hop) | The value head applied to the board state itself. One model evaluation. |
+| One move ahead (one-hop) | The value head applied to each board state one move later, averaged with the policy as weights. |
+| Midpoint | The average of the value head and one move ahead. |
 | Deep value | This repo: the same average carried down a tree of the moves whose path probability is at least `eps`. |
 | Path probability | The product of the policy probabilities of the moves from the root to a node: the share of games from the root that reach it, if both sides play like the policy. |
 
@@ -184,7 +208,7 @@ v = deep.value(board, white_elo=1500, black_elo=1480)
 
 v.wdl        # (win, draw, loss) for White: the deep value
 v.value      # the same as one number: win + draw / 2
-v.zero_hop   # the value head alone
+v.zero_hop   # the value head
 v.one_hop    # one move ahead
 v.moves      # the likeliest moves here, each with its policy probability and the deep value after it
 v.nodes, v.depth
@@ -218,9 +242,9 @@ Stability is measured by following 60 games move by move (4,425 board states) an
 
 | Estimate | Model evaluations | Change per move (points) | Correlation of successive changes |
 | --- | --- | --- | --- |
-| Value head alone | 1 | 7.5 | −0.61 |
+| Value head | 1 | 7.5 | −0.61 |
 | One move ahead | about 32 | 7.3 | −0.62 |
-| Midpoint of the two rows above | about 32 | 4.7 | 0.00 |
+| Midpoint | about 32 | 4.7 | 0.00 |
 | Deep value, `eps` 0.5 | 2 | 5.9 | −0.21 |
 | Deep value, `eps` 0.2 | 4 | 5.2 | −0.06 |
 | Deep value, `eps` 0.1 | 8 | 5.0 | −0.03 |
@@ -232,7 +256,7 @@ Stability is measured by following 60 games move by move (4,425 board states) an
 
 - **One move ahead** does not help. It moves the lean to the other player and zig-zags as much.
 - **A fixed depth of 2 to 8 moves** keeps the lean at every depth ([docs/consistency.md](docs/consistency.md)), and the cost grows about thirtyfold per move of depth.
-- **The midpoint of the value head and one move ahead** cancels the lean and is as stable as the default deep value. It costs about 32 evaluations, though, and a tree of 4 evaluations (`eps` 0.2) is nearly as stable. It is also slightly less accurate against real game results than any tree from `eps` 0.2 down.
+- **The midpoint** cancels the lean and, along a game, moves as little per move as the default deep value. On the one-move check in [Results](#results) its step is still more than twice as wide. It costs about 32 evaluations, though, and a tree of 4 evaluations (`eps` 0.2) is nearly as stable. It is also slightly less accurate against real game results than any tree from `eps` 0.2 down.
 
 ### The threshold
 
@@ -251,7 +275,7 @@ A move that is not followed counts with the value head of the board state it lea
 
 ## Limits
 
-- **Cost.** A deep value at the default threshold averages about 390 model evaluations, 2 to 4 seconds on a laptop CPU, against one evaluation for the value head. A whole game takes a few minutes (the 57-move example above: three and a half minutes on a busy laptop CPU). A looser threshold cuts this ([the threshold](#the-threshold)).
+- **Cost.** A deep value at the default threshold averages about 390 model evaluations, 2 to 4 seconds on a laptop CPU, against one evaluation for the value head. A whole game takes a few minutes (a 57-move game: three and a half minutes on a busy laptop CPU). A looser threshold cuts this ([the threshold](#the-threshold)).
 - **It inherits the policy's blind spots.** If the policy head gives a move too little probability, the lines behind that move are underweighted. The tree corrects the value head with the policy head; it adds no outside chess knowledge and no engine.
 - **No clock.** The released Maia-3 checkpoints take no clock input, so time trouble is invisible to both heads and to the tree. In games that ended on time the deep value is no closer to the outcome than the value head (MSE change x1000: −0.2, interval −2.9 to +2.6).
 - **Moves left out are valued roughly.** Rare blunders and rare brilliancies below the threshold stay invisible ([what the moves left out are worth](#what-the-moves-left-out-are-worth)).

@@ -26,6 +26,7 @@ RNG = np.random.default_rng(0)
 IMG = Path("docs/img")
 EXAMPLE = ("klZArXVF", 63, 74)      # game and plies of the stretch charted as the example: a level middlegame
                                     # where the value head reverses direction on every ply (chosen to illustrate)
+MID = "#8a63d2"                     # colour of the midpoint of the value head and one move ahead
 PCT = [50, 80, 90, 95]
 PCT_HEAD = ["Median", "80th percentile", "90th", "95th", "Mean"]
 
@@ -79,12 +80,12 @@ def k_moves_ahead() -> str:
     noise = np.mean([np.hypot(a, b) for r in rows for a, b in zip(r["se"][:-1], r["se"][1:])]) * 100
     check = abs(np.mean([r["mc2"] - r["exact"][2] for r in rows])) * 100
     md = [f"## The value head averaged k moves ahead: {len(rows)} board states\n\n`evals/lookahead.py`. V_k is the value head k "
-          f"moves later, weighted by the policy along every line; k = 0 is the value head alone and k = 1 is one move ahead. "
+          f"moves later, weighted by the policy along every line; k = 0 is the value head and k = 1 is one move ahead. "
           f"k = 0, 1, 2 are exact. k = 3 and up are sampled: 500 lines per board state, each move drawn from the policy, which "
           f"is unbiased; the noise on one step averages {noise:.1f} points, and the same draws give k = 2 within {check:.2f} "
           f"points of the exact value on average. Points, for the player to move at the sampled board state; ± is a 95% "
-          f"interval.\n\n![The value head averaged k moves ahead, minus the value head alone](img/zigzag_by_k.png)\n"]
-    md.append(table(["k moves ahead", "Minus the value head alone (k = 0): 10th percentile", "Median", "90th", "Average",
+          f"interval.\n\n![The value head averaged k moves ahead, minus the value head](img/zigzag_by_k.png)\n"]
+    md.append(table(["k moves ahead", "Minus the value head (k = 0): 10th percentile", "Median", "90th", "Average",
                      "Step from k − 1: 10th percentile", "Median", "90th", "Average", "Average minus the deep value (eps 0.002)"],
                     [[k] + ([""] * 8 if k == 0 else spread(V[:, k] - V[:, 0]) + [ci(V[:, k] - V[:, 0])] +
                             spread(V[:, k] - V[:, k - 1]) + [ci(V[:, k] - V[:, k - 1])]) + [ci(V[:, k] - deep)] for k in ks]))
@@ -118,7 +119,7 @@ def k_moves_ahead() -> str:
 
     md.append("\n### Gap to the deep value (eps 0.002)\n\nAbsolute values, points.\n")
     out = [[f"{k} moves ahead"] + pct(V[:, k] - deep) for k in ks]
-    out.append(["Midpoint of k = 0 and k = 1"] + pct((V[:, 0] + V[:, 1]) / 2 - deep))
+    out.append(["Midpoint"] + pct((V[:, 0] + V[:, 1]) / 2 - deep))
     out += [[f"Deep value, eps {e}"] + pct(np.array([r["deep"][e] for r in rows]) * 100 - deep) for e in ("0.2", "0.05", "0.01")]
     md.append(table(["Estimate"] + PCT_HEAD, out))
 
@@ -128,9 +129,9 @@ def k_moves_ahead() -> str:
     ax.fill_between(list(ks), lo, hi, color=C["zero_hop"], alpha=0.14, lw=0, label="10th to 90th percentile")
     ax.plot(list(ks), m, "-o", color=C["zero_hop"], lw=1.6, ms=6, mec=SURFACE, mew=1, label="median")
     ax.set_xticks(list(ks))
-    ax.set_xlabel("k, moves looked ahead (0 is the value head alone)")
-    ax.set_ylabel("change from the value head alone, points")
-    ax.set_title(f"The value head averaged k moves ahead, minus the value head alone ({len(rows)} board states)", loc="left", color=INK)
+    ax.set_xlabel("k, moves looked ahead (0 is the value head)")
+    ax.set_ylabel("change from the value head, points")
+    ax.set_title(f"The value head averaged k moves ahead, minus the value head ({len(rows)} board states)", loc="left", color=INK)
     ax.legend(frameon=False, loc="upper left", ncols=2, fontsize=9)
     ax.set_ylim(-14, 10)
     ax.set_yticks(range(-14, 11, 2))
@@ -144,16 +145,23 @@ def k_moves_ahead() -> str:
 def one_move() -> str:
     rows = [r for r in rows_of("tail_deep") if "deep" in r and len(r["p"]) > 1]
     out, gaps = [], {}
-    for name, own, kid in (("Value head alone", "head", "v1"), ("Deep value (eps 0.01)", "deep", "vd")):
+    for name, own, kid in (("Value head", "head", "v1"), ("Deep value (eps 0.01)", "deep", "vd")):
         gap = gaps[own] = moves_average(rows, own, kid)
         best = np.array([max(r[kid]) - r[own] for r in rows])
         out.append([name] + spread(gap) + [ci(gap), f"{np.abs(gap).mean():.2f}", share(np.abs(gap) >= 5), share(np.abs(gap) >= 10),
                                            share(best < 0), share(best < -0.02)])
-    fig, axes = plt.subplots(2, 1, figsize=(8.2, 4.6), sharex=True)
+    # The midpoint of the value head and one move ahead, M = (V0 + V1) / 2. Its average after the move is (V1 + V2) / 2,
+    # so its step is (V2 - V0) / 2: exact, from the lookahead run on the same board states.
+    ahead = {(r["game"], r["ply"]): r["exact"] for r in rows_of("lookahead")}
+    gap = gaps["mid"] = np.array([(ahead[r["game"], r["ply"]][2] - ahead[r["game"], r["ply"]][0]) / 2 for r in rows]) * 100
+    out.insert(1, ["Midpoint"] + spread(gap) +
+               [ci(gap), f"{np.abs(gap).mean():.2f}", share(np.abs(gap) >= 5), share(np.abs(gap) >= 10), "", ""])
+    fig, axes = plt.subplots(3, 1, figsize=(8.2, 6.6), sharex=True)
     bins = np.arange(-25, 16, 1)
-    for ax, (own, label, key) in zip(axes, (("head", "value head alone", "zero_hop"), ("deep", "deep value", "deep"))):
+    for ax, (own, label, key) in zip(axes, (("head", "value head", "zero_hop"),
+                                         ("mid", "midpoint", "mid"), ("deep", "deep value", "deep"))):
         g = gaps[own]
-        ax.hist(np.clip(g, -25, 15), bins=bins, weights=np.full(len(g), 100 / len(g)), color=C[key], alpha=0.85)
+        ax.hist(np.clip(g, -25, 15), bins=bins, weights=np.full(len(g), 100 / len(g)), color={**C, "mid": MID}[key], alpha=0.85)
         ax.axvline(0, color=MUTED, lw=1)
         top = ax.get_ylim()[1] * 1.25
         ax.set_ylim(0, top)
@@ -163,14 +171,15 @@ def one_move() -> str:
                 ax.text(q + {"right": -0.3, "left": 0.3}[side], top * 0.93, f"{name}: {q:+.1f}", ha=side, va="top", fontsize=9, color=INK)
         ax.set_title(f"{label} (median {np.median(g):+.1f})", loc="left", color=INK, fontsize=10)
         ax.set_ylabel("% of board states\nper 1-point bin")
-    axes[1].set_xlabel("average value after the player's move, minus the value before it (points, for that player)")
+    axes[-1].set_xlabel("average value after the player's move, minus the value before it (points, for that player)")
     fig.tight_layout()
     fig.savefig(IMG / "one_move_step.png", dpi=170)
     plt.close(fig)
     return (f"## One move: {len(rows)} board states, every legal move valued afresh\n\nEach legal move gets its own tree "
             f"(`evals/tail_deep.py`), so the deep value of a board state is compared with deep values it was not built from. "
             f"If every legal move lowers the value, the value before the move was one the player could not keep. Points, for "
-            f"the player to move; ± is a 95% interval.\n\n![The step from a value to the average of the values after each move]"
+            f"the player to move; ± is a 95% interval. The midpoint is the average of the value head and one move ahead; its "
+            f"step is exact, from the values two moves ahead (`evals/lookahead.py`).\n\n![The step from a value to the average of the values after each move]"
             f"(img/one_move_step.png)\n\n" +
             table(["Estimate", "Value after the move, averaged over the moves, minus the value before: 10th percentile", "Median",
                    "90th", "Average (should be 0)", "Mean absolute", "5 points or more either way", "10 points or more",
@@ -179,7 +188,7 @@ def one_move() -> str:
 
 # --- along whole games ------------------------------------------------------------------------------------------
 def along_the_game(games: list[list[dict]]) -> str:
-    est = [("Value head alone", lambda r: r["zero_hop"]), ("One move ahead", lambda r: r["one_hop"]),
+    est = [("Value head", lambda r: r["zero_hop"]), ("One move ahead", lambda r: r["one_hop"]),
            ("Deep value, eps 0.05", lambda r: r["eps"]["0.05"]), ("Deep value, eps 0.01", lambda r: r["eps"]["0.01"]),
            ("Deep value, eps 0.002", lambda r: r["deep"])]
     out = []
@@ -204,7 +213,7 @@ def along_the_game(games: list[list[dict]]) -> str:
     swing = {}
     for name, f in (est[0], est[1], est[-1]):
         swing[name] = np.concatenate([np.diff(exp([f(r) for r in g])) for g in games]) * 100
-    extra = swing["Value head alone"] - swing["Deep value, eps 0.002"]
+    extra = swing["Value head"] - swing["Deep value, eps 0.002"]
     sizes = [[name] + pct(x)[:-1] + [share(np.abs(x) >= 5), share(np.abs(x) >= 10)] for name, x in
              list(swing.items()) + [("Value head's change minus the deep value's, same move", extra)]]
     sizes = ("\n\n### How large the change from one move to the next is\n\nAbsolute change in the value over one played move, "
@@ -222,8 +231,8 @@ def along_the_game(games: list[list[dict]]) -> str:
 def side_by_side(games: list[list[dict]]) -> str:
     main = load("main")
     y, gm = np.array([r["result"] for r in main]), by_game(main)
-    est = [("Value head alone", "1", lambda r: r["zero_hop"]), ("One move ahead", "about 32", lambda r: r["one_hop"]),
-           ("Midpoint of the two", "about 32", mid)]
+    est = [("Value head", "1", lambda r: r["zero_hop"]), ("One move ahead", "about 32", lambda r: r["one_hop"]),
+           ("Midpoint", "about 32", mid)]
     est += [(f"Deep value, eps {e}", n, (lambda e: lambda r: r["eps"][e])(e)) for e, n in
             (("0.5", "2"), ("0.2", "4"), ("0.1", "8"), ("0.05", "16"), ("0.01", "80"))]
     est.append(("Deep value, eps 0.002", "390", lambda r: r["deep"]))
@@ -259,7 +268,7 @@ def chart_example(games: list[list[dict]]) -> str:
     gid, a, b = EXAMPLE
     g = next(g for g in games if g[0]["game"] == gid)[a:b]
     x = np.arange(len(g))
-    lines = [("zero_hop", "value head alone", 1.8, lambda r: r["zero_hop"]), ("deep", "deep value (eps 0.002)", 2.4, lambda r: r["deep"])]
+    lines = [("zero_hop", "value head", 1.8, lambda r: r["zero_hop"]), ("deep", "deep value (eps 0.002)", 2.4, lambda r: r["deep"])]
     fig, ax = plt.subplots(figsize=(8.6, 3.8))
     ax.axhline(50, color=MUTED, lw=1)
     for key, label, lw, f in lines:
@@ -289,7 +298,7 @@ def chart_example(games: list[list[dict]]) -> str:
 
     def v(r, f):
         return f"{exp([f(r)])[0] * 100:.0f}"
-    return table(["To move", "Value head alone", "Deep value", "Move then played"],
+    return table(["To move", "Value head", "Deep value", "Move then played"],
                  [["White" if r["white_to_move"] else "Black", v(r, lines[0][3]), v(r, lines[1][3]),
                    f"{r['ply'] // 2 + 1}{'.' if r['white_to_move'] else '...'}{r['played']}"] for r in g])
 
@@ -302,7 +311,7 @@ def chart_game(games: list[list[dict]]):
     x = np.arange(len(g)) / 2 + 1
     fig, ax = plt.subplots(figsize=(9.6, 3.9))
     ax.axhline(50, color=MUTED, lw=1)
-    ax.plot(x, exp([r["zero_hop"] for r in g]) * 100, "-", color=C["zero_hop"], lw=1.4, label="value head alone")
+    ax.plot(x, exp([r["zero_hop"] for r in g]) * 100, "-", color=C["zero_hop"], lw=1.4, label="value head")
     ax.plot(x, exp([r["deep"] for r in g]) * 100, "-", color=C["deep"], lw=2.2, label="deep value (eps 0.002)")
     ax.set_xlabel("move number")
     ax.set_ylabel("White's win chance, % (win + half of draws)")
@@ -348,6 +357,6 @@ if __name__ == "__main__":
           "eleven board states between -0.36 and +0.44 pawns) where the value head reverses direction on every move. White's "
           "value, points.\n\n![One stretch of a game, move by move](img/zigzag_example.png)\n\n" + example +
           "\n\nAnd a whole game chosen by rule, not by eye: of the games of 50 to 90 moves, the one whose value-head movement per "
-          "move is the median.\n\n![White's value along one game: value head alone and deep value](img/game_trace.png)"]
+          "move is the median.\n\n![White's value along one game: value head and deep value](img/game_trace.png)"]
     Path("docs/consistency.md").write_text("\n\n".join(md) + "\n")
     print("\n\n".join(md))

@@ -111,7 +111,7 @@ def main():
     ty = top + BOARD + 24
     o.append(f'<text x="24" y="{ty}" font-size="13" font-weight="700" fill="{INK}">Root board state, {mover} to move</text>')
     lines = [("Value for White (win + draw / 2)", None),
-             ("Value head alone (zero-hop)", scalar(score.zero_hop)), ("One move ahead (one-hop)", scalar(score.one_hop)),
+             ("Value head (zero-hop)", scalar(score.zero_hop)), ("One move ahead (one-hop)", scalar(score.one_hop)),
              (f"This tree (eps {EPS})", score.value),
              ("Default tree (eps 0.002)", fine.value)]
     for k, (name, v) in enumerate(lines):

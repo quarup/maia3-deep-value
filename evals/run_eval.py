@@ -1,7 +1,7 @@
 """Estimate sampled positions of the evaluation games every way at once: evals/results/<name>/*.jsonl.
 
 For each game, `--positions` plies are drawn at random (seeded by the game id, from ply 8 on) and each
-position is scored once with the tree at `--eps`. That one tree also gives the value head alone (zero-hop),
+position is scored once with the tree at `--eps`. That one tree also gives the value head (zero-hop),
 its average one move later (one-hop), and the tree at every looser threshold in `--also` and every depth
 cap in `--depths`. One row per position is appended as it is done, so a stopped run resumes.
 

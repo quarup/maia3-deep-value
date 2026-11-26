@@ -11,7 +11,7 @@ Every value estimate is compared with the real game outcome. The first two metri
   * MSE of value: the squared gap between the value as one number (win + draw / 2) and the outcome as 1,
     1/2 or 0. It ignores how probability is split between a draw and a decisive game.
 
-Differences from zero-hop come with a 95% interval from resampling whole games (board states of one game
+Differences from the value head come with a 95% interval from resampling whole games (board states of one game
 share their outcome, so games, not board states, are the unit). The charts and the per-slice tables use
 the MSE of value. Everything is computed from the stored rows in evals/results/<run>/*.jsonl, which keep
 the full (win, draw, loss) of every estimate, so other metrics can be added without rerunning the model.
@@ -34,7 +34,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 # colours: three series in a fixed order (validated for colour-blind separation), neutral ink and grid
 C = {"zero_hop": "#2a78d6", "one_hop": "#eb6834", "deep": "#1baf7a"}
-NAME = {"zero_hop": "value head alone (zero-hop)", "one_hop": "one move ahead (one-hop)", "deep": "deep value"}
+NAME = {"zero_hop": "value head", "one_hop": "one move ahead", "deep": "deep value"}
+MID_NAME, MID_COLOR = "midpoint", "#8a63d2"
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 plt.rcParams.update({
     "font.family": "sans-serif", "font.size": 10, "text.color": INK, "axes.labelcolor": MUTED,
@@ -59,10 +60,11 @@ own page, [consistency.md](consistency.md).
   resignation or on time, at least 20 moves long (a move is one player's turn, so 10 by each), with the players within 400 rating points of each other.
   300 games were sampled per 200-point rating band from 800 to 2399 (`evals/fetch_games.py`); the runs take
   the bands in turn, so any prefix of the games is balanced by rating. How this population differs from the
-  Maia-3 paper's test set is in the [README](../README.md#the-evaluation-games).
+  Maia-3 paper's test set is in the [README](../README.md#dataset-evaluation-games).
 - **Board states.** Five per game, drawn at random after the first 8 moves, with a seed fixed by the game id.
-- **Estimates.** For each board state, at the two players' real ratings: the value head alone (zero-hop),
-  its policy-weighted average one move later (one-hop), and the deep value. One tree gives all three, and
+- **Estimates.** For each board state, at the two players' real ratings: the value head (`zero_hop` in the
+  data), one move ahead (the value head averaged over the board states one move later, weighted by the policy;
+  `one_hop` in the data), the midpoint (the average of those two), and the deep value. One tree gives all of them, and
   the deep value at every looser threshold and at several depth caps as well.
 - **Truth.** How the game ended: 1, 1/2 or 0 for White.
 - **Metrics.** Value accuracy (the Maia-3 paper's "game outcome prediction accuracy": how often the likeliest
@@ -70,7 +72,7 @@ own page, [consistency.md](consistency.md).
   Brier score over the three outcomes, and the MSE of value (the squared gap between win + draw / 2 and the
   result). Higher accuracy is better; lower is better for the other three.
 - **Intervals.** Board states of one game share its result, so 95% intervals come from resampling whole
-  games (2,000 resamples), on the paired difference from zero-hop.
+  games (2,000 resamples), on the paired difference from the value head.
 - **Raw data.** `evals/data/games.jsonl` holds the games and `evals/results/<run>/*.jsonl` one row per board
   state with every estimate's full (win, draw, loss), so any other metric can be computed without the model.
 
@@ -159,8 +161,8 @@ def slices(rows, y) -> list[tuple[str, np.ndarray]]:
         ("Rated 1600 to 1999", (elo >= 1600) & (elo < 2000)), ("Rated 2000 to 2399", elo >= 2000),
         ("Mover has 30 s or more", clock >= 30), ("Mover has under 30 s", (clock >= 0) & (clock < 30)),
         ("Game ended on the board or by resignation", term == "Normal"), ("Game ended on time", term == "Time forfeit"),
-        ("Deep value and zero-hop differ by 5 points or more", gap >= 0.05),
-        ("Deep value and zero-hop differ by under 5 points", gap < 0.05),
+        ("Deep value and value head differ by 5 points or more", gap >= 0.05),
+        ("Deep value and value head differ by under 5 points", gap < 0.05),
     ]
 
 
@@ -192,12 +194,17 @@ def main():
                ("MSE of value", brier, 1000, "x1000", lambda v: f"{v:.4f}")]
     head = ["Value estimate"]
     out = [[NAME[k]] for k in C]
+    MID = (P["zero_hop"] + P["one_hop"]) / 2                   # the midpoint of the value head and one move ahead
+    mid_row = [MID_NAME]
     for title, fn, scale, unit, show in metrics:
-        head += [title, f"vs zero-hop, {unit} (95%)"]
+        head += [title, f"vs value head, {unit} (95%)"]
         base = fn(P["zero_hop"], y)
         for row, k in zip(out, C):
             m = fn(P[k], y)
             row += [show(m.mean()), "" if k == "zero_hop" else fmt(*interval(m - base, game), scale=scale)]
+        m = fn(MID, y)
+        mid_row += [show(m.mean()), fmt(*interval(m - base, game), scale=scale)]
+    out.insert(2, mid_row)
     md.append(table(head, out))
 
     # --- the population, and the same scores under the Maia-3 paper's position filters -------------
@@ -230,29 +237,31 @@ def main():
         g = by_game([r for r, keep in zip(rows, m) if keep])
         one = interval((brier(P["one_hop"], y) - base_b)[m], g)
         deep = interval((brier(P["deep"], y) - base_b)[m], g)
-        out.append([name, int(m.sum()), f"{base_b[m].mean():.4f}", fmt(*one), fmt(*deep)])
-        plot.append((name, int(m.sum()), one, deep))
-    md.append("### MSE of value by slice (difference from zero-hop, x1000; negative is better)\n")
-    md.append(table(["Slice", "Board states", "Zero-hop MSE", "One-hop", "Deep value"], out))
+        half = interval((brier(MID, y) - base_b)[m], g)
+        out.append([name, int(m.sum()), f"{base_b[m].mean():.4f}", fmt(*one), fmt(*half), fmt(*deep)])
+        plot.append((name, int(m.sum()), one, half, deep))
+    md.append("### MSE of value by slice (difference from the value head, x1000; negative is better)\n")
+    md.append(table(["Slice", "Board states", "Value head MSE", "One move ahead", "Midpoint", "Deep value"], out))
 
     fig, ax = plt.subplots(figsize=(10.5, 0.36 * len(plot) + 1.9))
-    for i, (name, n, one, deep) in enumerate(plot):
+    look = {**C, "mid": MID_COLOR}, {"mid": "midpoint", "deep": "deep value"}
+    for i, (name, n, one, half, deep) in enumerate(plot):
         yy = len(plot) - 1 - i
-        for k, (m_, lo, hi), off in (("one_hop", one, 0.14), ("deep", deep, -0.14)):
-            ax.plot([lo * 1000, hi * 1000], [yy + off] * 2, color=C[k], lw=2, solid_capstyle="round")
-            ax.plot(m_ * 1000, yy + off, "o", color=C[k], ms=6, mec=SURFACE, mew=1, label=NAME[k] if i == 0 else None)
+        for k, (m_, lo, hi), off in (("mid", half, 0.14), ("deep", deep, -0.14)):       # one move ahead is in the table only
+            ax.plot([lo * 1000, hi * 1000], [yy + off] * 2, color=look[0][k], lw=2, solid_capstyle="round")
+            ax.plot(m_ * 1000, yy + off, "o", color=look[0][k], ms=6, mec=SURFACE, mew=1, label=look[1][k] if i == 0 else None)
     ax.axvline(0, color=MUTED, lw=1)
-    ax.set_yticks(range(len(plot)), [f"{n}  (n={c})" for n, c, _, _ in plot][::-1])
+    ax.set_yticks(range(len(plot)), [f"{n}  (n={c})" for n, c, *_ in plot][::-1])
     ax.tick_params(axis="y", colors=INK, length=0)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("MSE of value minus zero-hop's, x1000 (left of the line: closer to the real outcomes)")
-    fig.suptitle("Is the deep value closer to the real game outcomes than the value head alone?",
+    ax.set_xlabel("MSE of value minus the value head's, x1000 (left of the line: closer to the outcomes)", loc="right")
+    fig.suptitle("Is the deep value closer to the real game outcomes than the value head?",
                  x=0.02, ha="left", fontsize=11, fontweight="bold")
-    ax.legend(loc="lower left", bbox_to_anchor=(-0.02, 1.0), ncol=2, borderaxespad=0.2)
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.legend(*ax.get_legend_handles_labels(), loc="upper left", bbox_to_anchor=(0.01, 0.955), ncol=3)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(img / "mse_by_slice.png", dpi=170)
     plt.close(fig)
-    md.append("![MSE of value by slice, difference from zero-hop](img/mse_by_slice.png)\n")
+    md.append("![MSE of value by slice, difference from the value head](img/mse_by_slice.png)\n")
 
     # --- calibration -------------------------------------------------------------------------------
     edges = np.linspace(0, 1, 11)
@@ -266,10 +275,10 @@ def main():
         ys = [y[b == i].mean() for i in range(10) if (b == i).sum() >= 20]
         ax.plot(xs, ys, "-o", color=C[k], lw=2, ms=5, mec=SURFACE, mew=1, label=NAME[k])
         cal.append([NAME[k]] + [f"{y[b == i].mean():.2f}" if (b == i).sum() >= 20 else "" for i in range(10)])
-    cal.append(["board states (zero-hop)"] + [int((np.clip(np.digitize(exp(P["zero_hop"]), edges) - 1, 0, 9) == i).sum()) for i in range(10)])
+    cal.append(["board states (value head)"] + [int((np.clip(np.digitize(exp(P["zero_hop"]), edges) - 1, 0, 9) == i).sum()) for i in range(10)])
     ax.set_xlabel("Predicted value for White (win + draw / 2)")
     ax.set_ylabel("White's real average score")
-    ax.set_title("Calibration: do board states valued at 70% score 70%?")
+    ax.set_title("Do board states valued at 70% score 70%?")
     ax.set_aspect("equal")
     ax.legend(loc="upper left")
     fig.tight_layout()
@@ -291,7 +300,7 @@ def main():
         boots.append(float((w * move * (y - z)).sum() / (w * move * move).sum()))
     lo, hi = np.percentile(boots, [2.5, 97.5])
     md.append("### When the tree moves the value, does the real outcome follow?\n")
-    md.append(f"Regressing (outcome minus zero-hop) on (deep value minus zero-hop), through the origin: slope "
+    md.append(f"Regressing (outcome minus the value head) on (deep value minus the value head), through the origin: slope "
               f"**{s_all:.2f}** (95% {lo:.2f} to {hi:.2f}). A slope of 1 means the tree's correction is fully "
               f"right on average, 0 means it is noise, and in between means part of it is right. "
               f"Mean absolute move: {np.abs(move).mean() * 100:.1f} points; "
@@ -312,12 +321,12 @@ def main():
     ax.plot([-lim, lim], [-lim, lim], color=MUTED, lw=1, ls=(0, (4, 3)), label="the tree's correction is fully right")
     ax.axhline(0, color=MUTED, lw=1, label="the value head was right")
     ax.errorbar(xs, ys, yerr=es, fmt="o", color=C["deep"], ms=6, mec=SURFACE, mew=1, lw=1.5)
-    md.append(table(["Deep value minus zero-hop (points, bin mean)"] + [f"{x:+.1f}" for x in xs],
-                    [["Real outcome minus zero-hop (points)"] + [f"{v:+.1f}" for v in ys],
+    md.append(table(["Deep value minus the value head (points, bin mean)"] + [f"{x:+.1f}" for x in xs],
+                    [["Real outcome minus the value head (points)"] + [f"{v:+.1f}" for v in ys],
                      ["Board states"] + ns]))
     ax.set_xlim(-lim, lim)
-    ax.set_xlabel("How far the tree moved the value (deep value minus zero-hop, points)")
-    ax.set_ylabel("Real outcome minus zero-hop (points)")
+    ax.set_xlabel("How far the tree moved the value (deep value minus the value head, points)")
+    ax.set_ylabel("Real outcome minus the value head (points)")
     ax.set_title("When the tree moves the value, does the real outcome follow?")
     ax.legend(loc="upper left", fontsize=9)
     fig.tight_layout()
@@ -348,7 +357,7 @@ def main():
         zero = brier([r["zero_hop"] for r in rows], y)
         finest = exp([r["deep"] for r in rows])
         eps_keys = sorted(rows[0]["eps"], key=float, reverse=True)
-        series = [("zero-hop", [r["zero_hop"] for r in rows], 1), ("one-hop", [r["one_hop"] for r in rows], None)]
+        series = [("value head", [r["zero_hop"] for r in rows], 1), ("one move ahead", [r["one_hop"] for r in rows], None)]
         series += [(f"eps {e}", [r["eps"][e] for r in rows],
                     np.mean([r["eps_nodes"][e] for r in rows]) if "eps_nodes" in rows[0] else sweep_size.get(e)) for e in eps_keys]
         series.append((f"eps {own:g}", [r["deep"] for r in rows], np.mean([r["nodes"] for r in rows])))
@@ -356,12 +365,12 @@ def main():
         for name, wdl, nodes in series:
             b = brier(wdl, y)
             ch = np.abs(exp(wdl) - finest)
-            out.append([name, f"{b.mean():.4f}", "" if name == "zero-hop" else fmt(*interval(b - zero, game)),
+            out.append([name, f"{b.mean():.4f}", "" if name == "value head" else fmt(*interval(b - zero, game)),
                         f"{correct(wdl, y).mean() * 100:.1f}%", f"{ch.mean() * 100:.2f}", f"{np.percentile(ch, 95) * 100:.1f}",
                         "" if nodes is None else f"{nodes:.0f}"])
             pts.append((name, interval(b - zero, game), ch.mean() * 100, nodes))
         md.append(f"### {title}\n")
-        md.append(table(["Value estimate", "MSE of value", "vs zero-hop, x1000 (95%)", "Value accuracy",
+        md.append(table(["Value estimate", "MSE of value", "vs value head, x1000 (95%)", "Value accuracy",
                          "Mean gap to the finest tree (points)", "95th percentile gap", "Mean tree size (model evaluations)"], out))
         return pts, eps_keys
 
@@ -375,7 +384,7 @@ def main():
         ch = np.abs(exp([r["depth_cap"][dcap] for r in rows]) - exp(P["deep"]))
         out.append([f"at most {dcap} moves", f"{b.mean():.4f}", fmt(*interval(b - base_b, game)), f"{ch.mean() * 100:.2f}"])
     md.append("### The same tree cut at a depth (main run)\n")
-    md.append(table(["Tree", "MSE of value", "vs zero-hop, x1000 (95%)", "Mean gap to the full tree (points)"], out))
+    md.append(table(["Tree", "MSE of value", "vs value head, x1000 (95%)", "Mean gap to the full tree (points)"], out))
 
     if sweep_rows:
         md.append(f"## Deep sweep\n\nA smaller run with a finer tree, to see how much further the value moves and "
@@ -408,19 +417,19 @@ def main():
         md.append("![Gap to the finest tree and cost, by threshold](img/threshold_sweep.png)\n")
 
     # accuracy against truth by threshold, main run
-    pts = [p for p in main_pts if p[0] != "zero-hop"]
+    pts = [p for p in main_pts if p[0] != "value head"]
     fig, ax = plt.subplots(figsize=(7.4, 3.9))
     xs = range(len(pts))
     for x, (name, (m_, lo, hi), _, _) in zip(xs, pts):
-        col = C["one_hop"] if name == "one-hop" else C["deep"]
+        col = C["one_hop"] if name == "one move ahead" else C["deep"]
         ax.plot([x, x], [lo * 1000, hi * 1000], color=col, lw=2, solid_capstyle="round")
         ax.plot(x, m_ * 1000, "o", color=col, ms=7, mec=SURFACE, mew=1)
     ax.axhline(0, color=MUTED, lw=1)
-    ax.set_xticks(list(xs), [p[0].replace("eps ", "") for p in pts])
+    ax.set_xticks(list(xs), [p[0].replace("eps ", "").replace("one move ahead", "one move\nahead") for p in pts])
     ax.tick_params(axis="x", colors=INK)
     ax.grid(axis="x", visible=False)
-    ax.set_xlabel("One-hop, then the tree at each threshold (eps), finer to the right")
-    ax.set_ylabel("MSE of value minus zero-hop's, x1000")
+    ax.set_xlabel("One move ahead, then the tree at each threshold (eps), finer to the right")
+    ax.set_ylabel("MSE of value minus the value head's, x1000")
     ax.set_title("Closeness to real game outcomes, by how deep the tree goes")
     fig.tight_layout()
     fig.savefig(img / "mse_by_threshold.png", dpi=170)
@@ -432,7 +441,7 @@ def main():
         both = [(old[(r["game"], r["ply"])], r) for r in rows if (r["game"], r["ply"]) in old]
         ra, rb = [x for x, _ in both], [x for _, x in both]
         yb, gb = np.array([r["result"] for r in rb]), by_game(rb)
-        est = [("zero-hop (value head)", [r["zero_hop"] for r in rb], 1),
+        est = [("value head", [r["zero_hop"] for r in rb], 1),
                ("top 8 moves, renormalised, eps 0.01", [r["deep"] for r in ra], np.mean([r["nodes"] for r in ra])),
                ("this repo, eps 0.01", [r["eps"]["0.01"] for r in rb], sweep_size.get("0.01")),
                ("this repo, eps 0.002", [r["deep"] for r in rb], np.mean([r["nodes"] for r in rb]))]

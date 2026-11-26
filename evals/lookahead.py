@@ -2,7 +2,7 @@
 
 V_k of a board state is the average of the value head over the board states k plies later, each weighted by
 the probability the policy gives the moves that lead to it (a game that ends earlier keeps its result). V_0 is
-the value head alone and V_1 is one move ahead with every legal move. All are for the player to move at the
+the value head and V_1 is one move ahead with every legal move. All are for the player to move at the
 sampled board state, at the two players' real ratings.
 
   * V_0, V_1, V_2 are exact: every legal move, then every reply.

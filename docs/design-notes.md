@@ -16,7 +16,7 @@ This file records the choices behind `deep_value/tree.py` and the measurements e
 
 Design choices were judged two ways, because they answer different questions.
 
-**Gap to a reference tree.** For 30 board states (random games and points in them from the evaluation set) a reference value was computed with every legal move followed at `eps` 0.002, about 11,900 model evaluations per board state. A variant's *gap* is the absolute difference between its value and the reference's, in points (percentage points of win + draw / 2), averaged over the 30. This measures how much a shortcut changes the answer, with no noise from game results. It is cheap enough to compare many variants, but 30 board states give error bars of 0.15 to 0.9 points, and the reference is itself an approximation: its own value still moves by about 0.25 points between `eps` 0.005 and 0.002. For scale, the value head alone is 3.75 points from the reference.
+**Gap to a reference tree.** For 30 board states (random games and points in them from the evaluation set) a reference value was computed with every legal move followed at `eps` 0.002, about 11,900 model evaluations per board state. A variant's *gap* is the absolute difference between its value and the reference's, in points (percentage points of win + draw / 2), averaged over the 30. This measures how much a shortcut changes the answer, with no noise from game results. It is cheap enough to compare many variants, but 30 board states give error bars of 0.15 to 0.9 points, and the reference is itself an approximation: its own value still moves by about 0.25 points between `eps` 0.005 and 0.002. For scale, the value head is 3.75 points from the reference.
 
 **Real outcomes.** The value is compared with how the game ended, over thousands of board states ([evals.md](evals.md)). This is the yardstick that matters, but a single game result is very noisy, so only differences of about 0.2 x 1000 in MSE or more are detectable even with 10,000 board states.
 
@@ -70,7 +70,7 @@ Reading: "eps only" reaches the same gap as "top 8" for fewer evaluations at eve
 
 | Value estimate | Evaluations | Value accuracy | Value loss | Brier score | MSE of value | MSE vs top 8, x1000 (95%) |
 | --- | --- | --- | --- | --- | --- | --- |
-| Value head alone | 1 | 64.8% | 0.7169 | 0.4437 | 0.1910 | +3.0 (+1.4 to +4.6) |
+| Value head | 1 | 64.8% | 0.7169 | 0.4437 | 0.1910 | +3.0 (+1.4 to +4.6) |
 | top 8, eps 0.01 | 501 | 65.7% | 0.7068 | 0.4383 | 0.1880 | |
 | eps only, eps 0.01 | 80 | 65.6% | 0.7081 | 0.4388 | 0.1884 | +0.4 (+0.0 to +0.8) |
 | eps only, eps 0.002 | 389 | 65.6% | 0.7074 | 0.4384 | 0.1880 | −0.0 (−0.3 to +0.2) |
@@ -248,7 +248,7 @@ The fit to real outcomes improves by about 2% of MSE (section 6), which is modes
 
 **Along 60 whole games** (4,425 board states, before every move, `evals/run_games.py`), in points for the player who moved:
 
-| Check | Value head alone | One move ahead | Deep value, eps 0.05 | eps 0.01 | eps 0.002 |
+| Check | Value head | One move ahead | Deep value, eps 0.05 | eps 0.01 | eps 0.002 |
 | --- | --- | --- | --- | --- | --- |
 | A move changes the mover's value by (should be 0) | −2.38 | +3.07 | +0.21 | +0.50 | +0.53 |
 | Mean absolute change per move | 5.49 | 5.48 | 2.63 | 2.63 | 2.58 |
@@ -257,7 +257,7 @@ The fit to real outcomes improves by about 2% of MSE (section 6), which is modes
 
 **On 299 board states where every legal move got a tree of its own** (`evals/tail_deep.py`, deep value at eps 0.01):
 
-| Check | Value head alone | Deep value |
+| Check | Value head | Deep value |
 | --- | --- | --- |
 | Mean absolute gap between the value and the average of its moves' values | 4.77 | 0.58 |
 | Every legal move lowers the value | 35.1% | 3.0% |
@@ -270,7 +270,7 @@ What to take from it:
 - **The deep value keeps a small drift of about +0.5 points per move.** Its leaves are value heads at mixed depths, so the leans mostly cancel, not fully. It is a fifth of the value head's drift and has the other sign.
 - **The deep value moves slightly less than the result justifies (0.86 to 0.89; the interval reaches 1).** With 60 games this is not evidence of a fault.
 - **Consistency needs far fewer evaluations than the last bit of accuracy:** eps 0.05 (16 evaluations) already has no zig-zag.
-- **The midpoint of the value head and one move ahead also cancels the lean,** at about 32 evaluations, but is less accurate than the tree from 4 evaluations up (experiment log, section 5).
+- **The midpoint (the average of the value head and one move ahead) also cancels the lean,** at about 32 evaluations, but is less accurate than the tree from 4 evaluations up (experiment log, section 5).
 - **This is partly by construction.** The deep value is an average over its moves, so it should agree with them. The checks are still fair, because the value after a move comes from a separate tree with its own budget.
 
 ## 10. Not done
